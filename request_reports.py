@@ -174,6 +174,8 @@ if __name__ == "__main__":
 
     # send out the whole thing
     import requests
+    data = data.replace("'", '"')
+    print(data)
     response = requests.post('https://gateway.icloud.com/acsnservice/fetch', headers=request_headers, data=data)
     print(response.status_code, response.reason)
     res = response.json()['results']
