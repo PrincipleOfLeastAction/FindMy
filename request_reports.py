@@ -187,8 +187,11 @@ if __name__ == "__main__":
         priv = bytes_to_int(base64.b64decode(ids[report['id']]))
         data = base64.b64decode(report['payload'])
 
-        # the following is all copied from https://github.com/hatomist/openhaystack-python, thanks @hatomist!
+        # the following is mostly copied from https://github.com/hatomist/openhaystack-python, thanks @hatomist!
+        # Changes include getting the confidence field from the data received as opposed to the 
+        # horizontal accuracy field.
         timestamp = bytes_to_int(data[0:4])
+        confidence = bytes_to_int(data[4:5])
         if timestamp + 978307200 >= startdate:
             eph_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP224R1(), data[5:62])
             shared_key = ec.derive_private_key(priv, ec.SECP224R1(), default_backend()).exchange(ec.ECDH(), eph_key)
@@ -200,6 +203,7 @@ if __name__ == "__main__":
 
             decrypted = decrypt(enc_data, algorithms.AES(decryption_key), modes.GCM(iv, tag))
             res = decode_tag(decrypted)
+            res['conf'] = confidence
             res['timestamp'] = timestamp + 978307200
             res['isodatetime'] = datetime.datetime.fromtimestamp(res['timestamp']).isoformat()
             res['key'] = names[report['id']]
