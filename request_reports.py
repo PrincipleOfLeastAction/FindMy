@@ -33,9 +33,9 @@ def unpad(paddedBinary, blocksize):
 def decode_tag(data):
     latitude = struct.unpack(">i", data[0:4])[0] / 10000000.0
     longitude = struct.unpack(">i", data[4:8])[0] / 10000000.0
-    confidence = bytes_to_int(data[8:9])
+    horizontal_accuracy = bytes_to_int(data[8:9])
     status = bytes_to_int(data[9:10])
-    return {'lat': latitude, 'lon': longitude, 'conf': confidence, 'status':status}
+    return {'lat': latitude, 'lon': longitude, 'horizontal accuracy': horizontal_accuracy, 'status':status}
 
 def readKeychain():
     # https://github.com/libyal/dtformats/blob/main/documentation/MacOS%20keychain%20database%20file%20format.asciidoc
