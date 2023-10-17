@@ -145,4 +145,4 @@ class FindMy_proxy(socketserver.StreamRequestHandler):
 
 if __name__ == "__main__":
     if not pwd: pwd = getpass.getpass('Keychain password:')
-    socketserver.TCPServer(('localhost', 6176), FindMy_proxy).serve_forever()
+    socketserver.TCPServer(('', 6176), FindMy_proxy).serve_forever()
