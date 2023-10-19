@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 import socket
+import time
 
 def bytes_to_int(b):
     return int(codecs.encode(b, 'hex'), 16)
@@ -56,8 +57,14 @@ if __name__ == "__main__":
                 names[hashed_adv] = name
             else:
                 print("Couldn't find key pair in", keyfile)
-
-    data = '{"search": [{%s"ids": %s}]}' % ('' if args.map else '"startDate": 0, ', list(ids.keys()))
+    
+    unixTime = int(time.time())
+    endTime = (unixTime - 978307200) * 1000000
+    startTime = (unixTime - 60 * 60 * 24 - 978307200) * 1000000
+    data = '{"search": [{%s"ids": %s}]}' % ('' if args.map else 
+        f'"endDate": {endTime}, "startDate": {startTime}, ', 
+        list(ids.keys())
+    )
     data = data.replace("'", '"')
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
