@@ -10,6 +10,40 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 import socket
 import time
+import sqlite3
+
+def open_table():
+    create_location_table_query = """
+        CREATE TABLE IF NOT EXISTS location (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          key TEXT,
+          lat REAL NOT NULL,
+          lon REAL NOT NULL,
+          horizontal_accuracy INTEGER,
+          status INTEGER,
+          conf INTEGER,
+          timestamp INTEGER,
+          UNIQUE(key, lat, lon, horizontal_accuracy, status, conf, timestamp) ON CONFLICT IGNORE
+        );
+        """
+        
+    sqliteConnection = sqlite3.connect("airtag_location.db")
+    cursor = sqliteConnection.cursor()
+    
+    cursor.execute(create_location_table_query)
+    sqliteConnection.commit()
+    return sqliteConnection, cursor
+    
+def insert_data(connection, cursor, data):
+    for d in data:
+        query = f"""
+        INSERT OR IGNORE INTO
+          location (key, lat, lon, horizontal_accuracy, status, conf, timestamp)
+        VALUES
+          ('{d['key']}', {d['lat']}, {d['lon']}, {d['horizontal accuracy']}, {d['status']}, {d['conf']}, {d['timestamp']});
+        """ 
+        cursor.execute(query)
+    connection.commit()
 
 def bytes_to_int(b):
     return int(codecs.encode(b, 'hex'), 16)
@@ -123,5 +157,11 @@ if __name__ == "__main__":
         webbrowser.open('file:///tmp/tags.html')
     else:
         for rep in ordered: print(rep)
+
+    # Now save the data to the database.
+    conn, cursor = open_table()
+    insert_data(conn, cursor, ordered)
+    conn.close()
+
     print('found:   ', list(found))
     print('missing: ', [key for key in names.values() if key not in found])
