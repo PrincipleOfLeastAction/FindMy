@@ -10,40 +10,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 import socket
 import time
-import sqlite3
-
-def open_table():
-    create_location_table_query = """
-        CREATE TABLE IF NOT EXISTS location (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          key TEXT,
-          lat REAL NOT NULL,
-          lon REAL NOT NULL,
-          horizontal_accuracy INTEGER,
-          status INTEGER,
-          conf INTEGER,
-          timestamp INTEGER,
-          UNIQUE(key, lat, lon, horizontal_accuracy, status, conf, timestamp) ON CONFLICT IGNORE
-        );
-        """
-        
-    sqliteConnection = sqlite3.connect("airtag_location.db")
-    cursor = sqliteConnection.cursor()
-    
-    cursor.execute(create_location_table_query)
-    sqliteConnection.commit()
-    return sqliteConnection, cursor
-    
-def insert_data(connection, cursor, data):
-    for d in data:
-        query = f"""
-        INSERT OR IGNORE INTO
-          location (key, lat, lon, horizontal_accuracy, status, conf, timestamp)
-        VALUES
-          ('{d['key']}', {d['lat']}, {d['lon']}, {d['horizontal accuracy']}, {d['status']}, {d['conf']}, {d['timestamp']});
-        """ 
-        cursor.execute(query)
-    connection.commit()
 
 def bytes_to_int(b):
     return int(codecs.encode(b, 'hex'), 16)
@@ -64,21 +30,39 @@ def decode_tag(data):
     status = bytes_to_int(data[9:10])
     return {'lat': latitude, 'lon': longitude, 'horizontal accuracy': horizontal_accuracy, 'status':status}
 
+def request_raw_data(ip, port, ids, start_unix_time, end_unix_time):
+    unix_time_to_apple_time = lambda t: (t - 978307200) * 1000000
+    start_apple_time = unix_time_to_apple_time(start_unix_time)
+    end_apple_time = unix_time_to_apple_time(end_unix_time)
+    
+    data = '{"search": [{%s"ids": %s}]}' % (
+        f'"endDate": {end_apple_time}, "startDate": {start_apple_time}, ', 
+        list(ids.keys())
+    )
+    data = data.replace("'", '"')
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((ip, port))
+        sock.sendall(bytes(data + '\n', encoding='ascii'))
+        response = b''
+        while True:
+            rdata = sock.recv(1024)
+            if not rdata: break
+            response += rdata
+    finally:
+        sock.close()
+    res = json.loads(response)['results']
+    return res
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--prefix', help='only use keyfiles starting with this prefix', default='')
-    parser.add_argument('-m', '--map', help='show map using OSM', default=False, action='store_true')
-    args = parser.parse_args()
-
+def open_key_files(key_file_prefix: str="") -> tuple[dict, dict]:
     ids = {}
     names = {}
-    for keyfile in glob.glob(args.prefix+'*.keys'):
+    for keyfile in glob.glob(key_file_prefix + '*.keys'):
         # read key files generated with generate_keys.py
         with open(keyfile) as f:
             hashed_adv = ''
             priv = ''
-            name = keyfile[len(args.prefix):-5]
+            name = keyfile[len(key_file_prefix):-5]
             for line in f:
                 key = line.rstrip('\n').split(': ')
                 if key[0] == 'Private key':
@@ -91,30 +75,9 @@ if __name__ == "__main__":
                 names[hashed_adv] = name
             else:
                 print("Couldn't find key pair in", keyfile)
-    
-    unixTime = int(time.time())
-    endTime = (unixTime - 978307200) * 1000000
-    startTime = (unixTime - 60 * 60 * 24 - 978307200) * 1000000
-    data = '{"search": [{%s"ids": %s}]}' % ('' if args.map else 
-        f'"endDate": {endTime}, "startDate": {startTime}, ', 
-        list(ids.keys())
-    )
-    data = data.replace("'", '"')
+    return ids, names
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sock.connect(('', 6176))
-        sock.sendall(bytes(data + '\n', encoding='ascii'))
-        response = b''
-        while True:
-            rdata = sock.recv(1024)
-            if not rdata: break
-            response += rdata
-    finally:
-        sock.close()
-    res = json.loads(response)['results']
-    print('%d reports received.' % len(res))
-
+def decrypt_data(res, ids, names):
     ordered = []
     found = set()
     for report in res:
@@ -144,24 +107,5 @@ if __name__ == "__main__":
         found.add(res['key'])
         ordered.append(res)
     ordered.sort(key=lambda item: item.get('timestamp'))
-
-    if args.map:
-        import folium,webbrowser
-        iconcolors = ['red','blue','green','purple','pink','orange','beige','darkred','darkblue','darkgreen','darkpurple','lightred','lightblue','lightgreen','cadetblue','gray','lightgray','black']
-        osmap = folium.Map((ordered[-1]['lat'],ordered[-1]['lon']), zoom_start=15)
-        for rep in ordered:
-            dt = rep["isodatetime"].split('T')
-            popup = folium.Popup(folium.IFrame(html=f'<h1>{rep["key"]}</h1> <h3>{dt[0]}</h3> <h3>{dt[1]}</h3>', width=150, height=150))
-            osmap.add_child(folium.Marker(location=(rep['lat'],rep['lon']), popup=popup, icon=folium.Icon(color=iconcolors[list(found).index(rep['key'])])))
-        osmap.save('/tmp/tags.html')
-        webbrowser.open('file:///tmp/tags.html')
-    else:
-        for rep in ordered: print(rep)
-
-    # Now save the data to the database.
-    conn, cursor = open_table()
-    insert_data(conn, cursor, ordered)
-    conn.close()
-
-    print('found:   ', list(found))
-    print('missing: ', [key for key in names.values() if key not in found])
+    
+    return ordered, found
