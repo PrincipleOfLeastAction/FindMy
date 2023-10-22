@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import glob
 import datetime
-import argparse
 import base64,json
 import hashlib
 import codecs,struct
@@ -36,12 +35,11 @@ def request_raw_data(ip, port, ids, start_unix_time, end_unix_time):
     end_apple_time = unix_time_to_apple_time(end_unix_time)
     
     data = '{"search": [{%s"ids": %s}]}' % (
-        f'"endDate": {end_apple_time}, "startDate": {start_apple_time}, ', 
+        f'"startDate": {start_apple_time}, "endDate": {end_apple_time}, ', 
         list(ids.keys())
     )
     data = data.replace("'", '"')
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((ip, port))
         sock.sendall(bytes(data + '\n', encoding='ascii'))
         response = b''
@@ -49,8 +47,7 @@ def request_raw_data(ip, port, ids, start_unix_time, end_unix_time):
             rdata = sock.recv(1024)
             if not rdata: break
             response += rdata
-    finally:
-        sock.close()
+
     res = json.loads(response)['results']
     return res
 
