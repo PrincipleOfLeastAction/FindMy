@@ -86,7 +86,16 @@ def decrypt_data(res, ids, names):
         # horizontal accuracy field
         timestamp = bytes_to_int(data[0:4])
         confidence = bytes_to_int(data[4:5])
-        eph_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP224R1(), data[5:62])
+        
+        # Fixes issue with this not being decrypted correctly sometimes.
+        # https://github.com/biemster/FindMy/issues/52
+        if len(data) > 88:
+            data = data[0:4] + data[5:]
+        try:
+            eph_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP224R1(), data[5:62])
+        except Exception as e:
+            print(e)
+            continue
         shared_key = ec.derive_private_key(priv, ec.SECP224R1(), default_backend()).exchange(ec.ECDH(), eph_key)
         symmetric_key = sha256(shared_key + b'\x00\x00\x00\x01' + data[5:62])
         decryption_key = symmetric_key[:16]
